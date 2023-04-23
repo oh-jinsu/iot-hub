@@ -15,6 +15,12 @@ String wifipassword = "";
 
 WiFiServer server(3000);
 
+struct HttpRequest {
+  WiFiClient client;
+  String method;
+  String url;
+};
+
 void setup()
 {
   delay(1000);
@@ -26,14 +32,12 @@ void setup()
 
 void loop()
 {
-  waitForWiFiCredentials();
+  loopModeAP();
 
-  handleClient([](WiFiClient client, String method, String url) {
-    client.print(render("<html><body>You came here</body></html>"));
-  });
+  loopModeWiFi();
 }
 
-void waitForWiFiCredentials()
+void loopModeAP()
 {
   Serial.println("Switch to the AP mode");
 
@@ -48,39 +52,59 @@ void waitForWiFiCredentials()
   Serial.println("Server is listening");
 
   while(true) {
-    handleClient(responseAP);
+    HttpRequest request = getHttpRequest();
+
+    if (!request.client) {
+      continue;
+    }
+
+    if (request.url.startsWith("/submit")) {
+      int seperatorIndex = request.url.indexOf("?");
+
+      String queryString = request.url.substring(seperatorIndex + 1);
+
+      String ssid = getQueryStringParameter(queryString, "ssid");
+
+      String password = getQueryStringParameter(queryString, "password");
+
+      if (ssid.isEmpty()) {
+        request.client.print(render((
+          "<body>"
+            "<h1>You should provide SSID</h1>"
+          "</body>"
+        )));
+
+        continue;
+      }
+
+      wifissid = ssid;
+
+      wifipassword = password;
+
+      request.client.print(render(
+        "<body>"
+          "<h1>WiFi credential has been set</h1>"
+        "</body>"
+      ));
+
+      return;
+    }
+
+    request.client.print(render(
+      "<body>"
+        "<form action=\"/submit\">"
+          "<h1>WiFi 설정</h1>"
+          "<label>SSID<br/><input id=\"ssid\" name=\"ssid\" type=\"text\" required/></label><br />"
+          "<label>Password<br/><input id=\"password\" name=\"password\" type=\"password\" /></label><br />"
+          "<input type=\"submit\" />"
+        "</form>"
+      "</body>"
+    ));
   }
 }
 
-void responseAP(WiFiClient client, String method, String url) {
-  if (url.startsWith("/submit")) {
-    int seperatorIndex = url.indexOf("?");
+void loopModeWiFi() {
 
-    String queryString = url.substring(seperatorIndex + 1);
-
-    String ssid = getQueryStringParameter(queryString, "ssid");
-
-    String password = getQueryStringParameter(queryString, "password");
-
-    Serial.println(ssid);
-
-    Serial.println(password);
-
-    if (ssid.isEmpty() || password.isEmpty()) {
-      return;
-    }
-  }
-
-  client.print(render(
-    "<body>"
-      "<form action=\"/submit\">"
-        "<h1>WiFi 설정</h1>"
-        "<label>SSID<br/><input id=\"ssid\" name=\"ssid\" type=\"text\" /></label><br />"
-        "<label>Password<br/><input id=\"password\" name=\"password\" type=\"password\" /></label><br />"
-        "<input type=\"submit\" />"
-      "</form>"
-    "</body>"
-  ));
 }
 
 String getQueryStringParameter(String from, String key) {
@@ -116,11 +140,11 @@ String render(String inner) {
   return header + inner + tail;
 }
 
-void handleClient(void (*callback)(WiFiClient, String, String)) {
+HttpRequest getHttpRequest() {
   WiFiClient client = server.accept();
 
   if (!client) {
-    return;
+    return (HttpRequest){ client, "", "" };
   }
 
   client.setTimeout(5000);  // default is 1000
@@ -145,7 +169,7 @@ void handleClient(void (*callback)(WiFiClient, String, String)) {
 
   String url = leftOver.substring(0, urlIndex);
 
-  callback(client, method, url);
+  return (HttpRequest){ client, method, url };
 }
 
 
