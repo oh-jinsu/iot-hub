@@ -35,10 +35,6 @@ void loop()
 
 void waitForWiFiCredentials()
 {
-  if (wifissid.length() != 0) {
-    return;
-  }
-
   Serial.println("Switch to the AP mode");
 
   WiFi.softAP(apssid, appassword);
@@ -57,8 +53,23 @@ void waitForWiFiCredentials()
 }
 
 void responseAP(WiFiClient client, String method, String url) {
-  Serial.print(method);
-  Serial.print(url);
+  if (url.startsWith("/submit")) {
+    int seperatorIndex = url.indexOf("?");
+
+    String queryString = url.substring(seperatorIndex + 1);
+
+    String ssid = getQueryStringParameter(queryString, "ssid");
+
+    String password = getQueryStringParameter(queryString, "password");
+
+    Serial.println(ssid);
+
+    Serial.println(password);
+
+    if (ssid.isEmpty() || password.isEmpty()) {
+      return;
+    }
+  }
 
   client.print(render(
     "<body>"
@@ -70,6 +81,24 @@ void responseAP(WiFiClient client, String method, String url) {
       "</form>"
     "</body>"
   ));
+}
+
+String getQueryStringParameter(String from, String key) {
+  int keyIndex = from.indexOf(key + "=");
+
+  if (keyIndex == -1) {
+    return "";
+  }
+
+  String leftOver = from.substring(keyIndex + key.length() + 1);
+
+  int seperatorIndex = leftOver.indexOf("&");
+
+  if (seperatorIndex == -1) {
+    return leftOver;
+  }
+
+  return leftOver.substring(0, seperatorIndex);
 }
 
 String render(String inner) {
